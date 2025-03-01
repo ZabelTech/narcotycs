@@ -1,0 +1,3 @@
+object={"bar": "baz"}
+get(object,"bar")
+get(object,"foo")

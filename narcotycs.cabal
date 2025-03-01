@@ -1,0 +1,67 @@
+cabal-version:      3.0
+name:               narcotycs
+version:            0.1.0.0
+synopsis:           Non-Academic ReCOnciliation of TYpes and ContraintS
+-- description:
+license:            WTFPL
+license-file:       LICENSE
+author:             Robert Zabel
+-- A copyright notice.
+-- copyright:
+build-type:         Simple
+
+-- Extra doc files to be distributed with the package, such as a CHANGELOG or a README.
+extra-doc-files:    CHANGELOG.md
+
+-- Extra source files to be distributed with the package, such as examples, or a tutorial module.
+-- extra-source-files:
+
+common warnings
+    ghc-options: -Wall
+
+executable nacotic
+    import:           warnings
+    main-is:          Main.hs
+
+    -- LANGUAGE extensions used by modules in this package.
+    -- other-extensions:
+
+    build-depends:    base ^>= 4.20.0.0,
+                      lib-nacotic,
+                      mtl,
+                      transformers
+
+    hs-source-dirs:   app
+
+    default-language: GHC2024
+
+library lib-nacotic
+    import:           warnings
+    exposed-modules:  Naive.Checker,
+                      Naive.Constraints,
+                      Naive.Interface,
+                      Naive.Parser
+
+    -- LANGUAGE extensions used by modules in this package.
+    -- other-extensions:
+
+    build-depends:    base ^>= 4.20.0.0,
+                      containers,
+                      mtl,
+                      parsec,
+                      transformers
+
+    hs-source-dirs:   lib
+    default-language: GHC2024
+
+Test-Suite test-nacotic
+  type:               exitcode-stdio-1.0
+  other-modules:      Parser,
+                      Checker
+  main-is:            Main.hs
+  hs-source-dirs:     test
+  build-depends:      base  ^>= 4.20.0.0,
+                      HUnit,
+                      lib-nacotic,
+                      parsec,
+  default-language:   GHC2024
