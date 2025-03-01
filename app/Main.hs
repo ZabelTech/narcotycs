@@ -7,6 +7,7 @@ import System.Environment
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 
+reportParsingError :: Show a1 => Either a1 a2 -> IO (Maybe a2)
 reportParsingError (Right res) = return $ Just  res
 reportParsingError (Left err)  = do
   print $ "Parsing Error: " ++ show err

@@ -1,73 +1,84 @@
 module Naive.Constraints where
 
-import Control.Monad (guard,unless)
+import Control.Monad (guard)
 import Control.Monad.Except (MonadError(..))
 import Data.Either (partitionEithers)
 import Data.List (intersect,nub)
 
-data Fact = HasKey Constraint
-          | HasNotKey Constraint
-          | IsLiteral String
+data NaiveType = Index | String | Function
   deriving (Eq,Show)
 
-data Constraint = By Fact
-                | Union Constraint Constraint
-                | Universe
-  deriving (Eq,Show)
+data Fact (a :: NaiveType) where
+  HasKey     :: Constraint 'String -> Fact 'Index
+  HasNotKey  :: Constraint 'String -> Fact 'Index
+  IsLiteral  :: String -> Fact 'String
+  Expression :: { name       :: String,
+                  expression :: ([IsConstraint] -> Either ConstraintError IsConstraint)
+                } -> Fact 'Function
 
-data ConstraintExpression = Expression {
-  name       :: String,
-  expression :: ([IsConstraint] -> Either ConstraintError IsConstraint) }
+deriving instance Eq (Fact 'String)
+deriving instance Eq (Fact 'Index)
+deriving instance Show (Fact 'String)
+deriving instance Show (Fact 'Index)
 
-instance Show ConstraintExpression where
+instance Show (Fact 'Function) where
   show (Expression name _) = "Expression<" ++ name ++ ">"
 
-instance Eq ConstraintExpression where
+instance Eq (Fact 'Function) where
   (Expression lhs _) == (Expression rhs _) = lhs == rhs
 
-data IsConstraint = IsIndex Constraint
-                  | IsString Constraint
-                  | IsFunction { args   :: [ConstraintExpression],
-                                 result :: ConstraintExpression }
+data Constraint a = By (Fact a)
+                  | Union (Constraint a) (Constraint a)
+                  | Universe
+
+deriving instance Eq (Constraint 'String)
+deriving instance Eq (Constraint 'Index)
+deriving instance Eq (Constraint 'Function)
+deriving instance Show (Constraint 'String)
+deriving instance Show (Constraint 'Index)
+deriving instance Show (Constraint 'Function)
+
+data IsConstraint = IsIndex (Constraint 'Index)
+                  | IsString (Constraint 'String)
+                  | IsFunction [(Constraint 'Function)] (Constraint 'Function)
   deriving (Eq,Show)
 
-data ConstraintType = Index | String | Function
-  deriving (Eq,Show)
+data ConstraintError = forall (a :: NaiveType). Show (Fact a) => Conflicts    [(Fact a,Fact a)]
+                     | forall (a :: NaiveType). Show (Fact a) => NotSatisfied [Fact a]
+                     | UnexpectedType { expected :: NaiveType,
+                                        actual   :: NaiveType }
 
-data ConstraintError = Conflicts    [(Fact,Fact)]
-                     | NotSatisfied [Fact]
-                     | UnexpectedType { expected :: ConstraintType,
-                                        actual   :: ConstraintType }
-  deriving (Eq,Show)
+deriving instance Show ConstraintError
 
 type ConstraintErrorM m = MonadError ConstraintError m
 
-fromFacts :: [Fact] -> Constraint
+fromFacts :: [Fact a] -> Constraint a
 fromFacts [] = Universe
 fromFacts xs = foldl1 Union $ By <$> xs
 
-toFacts :: Constraint -> [Fact]
+toFacts :: Eq (Fact a) =>Constraint a -> [Fact a]
 toFacts Universe        = []
 toFacts (By f)          = [f]
 toFacts (Union lhs rhs) = nub $ toFacts lhs ++ toFacts rhs
 
-getType :: IsConstraint -> ConstraintType
+getType :: IsConstraint -> NaiveType
 getType (IsIndex _)      = Index
 getType (IsString _)     = String
 getType (IsFunction _ _) = Function
 
-isOpen :: Constraint -> Bool
+isOpen :: Constraint a -> Bool
 isOpen Universe        = True
 isOpen (Union lhs rhs) = isOpen lhs || isOpen rhs
 isOpen _               = False
 
-partitionFacts :: Constraint -> ([Constraint], [Constraint])
+partitionFacts :: Constraint 'Index -> ([Constraint 'String], [Constraint 'String])
 partitionFacts v = partitionFacts' $ toFacts v
-  where partitionFacts' = partitionEithers . map (\case
+  where partitionFacts' :: [Fact 'Index] -> ([Constraint 'String], [Constraint 'String])
+        partitionFacts' = partitionEithers . map (\case
           HasKey a    -> Right a
           HasNotKey a -> Left a)
 
-getConflicts :: Constraint -> Constraint -> [(Fact,Fact)]
+getConflicts :: Constraint 'Index -> Constraint 'Index -> [(Fact 'Index,Fact 'Index)]
 getConflicts lhs rhs =
   nub $ (rhsHasNot `conflicts` lhsHas) ++ (lhsHasNot `conflicts` rhsHas)
   where (lhsHasNot,lhsHas) = partitionFacts lhs
@@ -76,7 +87,7 @@ getConflicts lhs rhs =
           x <- xs `intersect` ys
           return (HasKey x, HasNotKey x)
 
-getUnsatisfied :: Constraint -> Constraint -> [Fact]
+getUnsatisfied :: Constraint 'Index -> Constraint 'Index -> [Fact 'Index]
 getUnsatisfied lhs rhs = do
   x <- rhsHas
   guard $ x `notElem` lhsHas
@@ -84,7 +95,7 @@ getUnsatisfied lhs rhs = do
   where (_,lhsHas) = partitionFacts lhs
         (_,rhsHas) = partitionFacts rhs
 
-unifyFacts :: ConstraintErrorM m => Constraint -> Constraint -> m Constraint
+unifyFacts :: ConstraintErrorM m => Constraint 'Index -> Constraint 'Index -> m (Constraint 'Index)
 unifyFacts lhs rhs
   | not $ null conflicts = throwError $ Conflicts conflicts
   | isOpen lhs           = return $ Union lhs rhs
@@ -92,12 +103,6 @@ unifyFacts lhs rhs
   | otherwise            = throwError $ NotSatisfied unsatisfied
   where unsatisfied = getUnsatisfied lhs rhs
         conflicts   = getConflicts lhs rhs
-
-sumFacts :: ConstraintErrorM m => Constraint -> Constraint -> m Constraint
-sumFacts lhs rhs = do
-  unless (null conflicts) $ throwError $ Conflicts conflicts
-  return $ Union lhs rhs
-  where conflicts = getConflicts lhs rhs
 
 combineConstraints :: ConstraintErrorM m => IsConstraint -> IsConstraint -> m IsConstraint
 combineConstraints (IsIndex lhs) (IsIndex rhs) = IsIndex <$> unifyFacts lhs rhs

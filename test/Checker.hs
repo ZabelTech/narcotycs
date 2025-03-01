@@ -5,6 +5,9 @@ import Naive.Parser
 import Naive.Checker
 import Naive.Constraints
 
+instance Eq CheckerError where
+  a == b = show a == show b
+
 assertCorrectlyParsed code =
   either (assertFailure . ("parsing error: " ++) . show) return $ Naive.Parser.parseString code
 

@@ -1,6 +1,6 @@
 module Naive.Checker (checkCode
                      ,Constraint(..)
-                     ,ConstraintType(..)
+                     ,NaiveType(..)
                      ,CheckerError(..)) where
 
 import Control.Monad (forM_,void)
@@ -21,7 +21,7 @@ type CheckerM m      = (CheckerErrorM m, CheckerStateM m)
 data CheckerError = Constraint ConstraintError
                   | UnknownIdentifier String
                   | WrongArity {expected :: Int, actual :: Int }
-  deriving (Eq,Show)
+  deriving (Show)
 
 withCheckerError :: CheckerM m => Either ConstraintError a -> m a
 withCheckerError = either (throwError . Constraint) return
@@ -37,10 +37,11 @@ getConstraint name = do
 setConstraint :: CheckerStateM m => String -> IsConstraint -> m ()
 setConstraint name newConstraint = modify $ M.insert name newConstraint
 
-applyExpression :: CheckerM m => [IsConstraint] -> (IsConstraint,ConstraintExpression) -> m ()
-applyExpression argConstraints (arg,Naive.Constraints.Expression name expression) = do
+applyExpression :: CheckerM m => [IsConstraint] -> (IsConstraint,Constraint 'Function) -> m ()
+applyExpression argConstraints (arg,By (Naive.Constraints.Expression name expression)) = do
   constraint <- withCheckerError $ expression argConstraints >>= combineConstraints arg
   setConstraint name constraint
+applyExpression _ _ = error $ "unexpected function constraint"
 
 collectConstraints :: CheckerErrorM m => [Stmt] -> m (M.Map String IsConstraint)
 collectConstraints statements = runCheckerM $ do
@@ -56,7 +57,7 @@ collectConstraints statements = runCheckerM $ do
       getConstraint fnName >>= \case
         IsFunction argConstraints _ | length argConstraints /= length args ->
           throwError $ WrongArity (length argConstraints) (length args)
-        IsFunction argConstraints retConstraint -> do
+        IsFunction argConstraints (By retConstraint) -> do
           collectedArgConstraints <- mapM collectConstraint' args
           forM_ (zip collectedArgConstraints argConstraints) $
             applyExpression collectedArgConstraints

@@ -7,20 +7,20 @@ import Naive.Constraints
 builtInFunctions :: [(String,IsConstraint)]
 builtInFunctions = [
   ("get",IsFunction [
-      Expression "index" $ \(_:IsString key:_) -> return $ IsIndex $ fromFacts [HasKey key],
-      Expression "key" $ \_args -> return $ IsString Universe
-      ] $ Expression "return" $ \_args -> return $ IsString Universe
+      By $ Expression "index" $ \(_:IsString key:_) -> return $ IsIndex $ fromFacts [HasKey key],
+      By $ Expression "key" $ \_args -> return $ IsString Universe
+      ] $ By $ Expression "return" $ \_args -> return $ IsString Universe
   ),
   ("add",IsFunction [
-      Expression "index" $ \(_:IsString key:_) -> return $ IsIndex $ fromFacts [HasNotKey key],
-      Expression "key" $ \_args -> return $ IsString Universe,
-      Expression "value" $ \_args -> return $ IsString Universe
-      ] $ Expression "return" $ \(tbl:IsString key:_) -> unionWithFact tbl $ HasKey key
+      By $ Expression "index" $ \(_:IsString key:_) -> return $ IsIndex $ fromFacts [HasNotKey key],
+      By $ Expression "key" $ \_args -> return $ IsString Universe,
+      By $ Expression "value" $ \_args -> return $ IsString Universe
+      ] $ By $ Expression "return" $ \(tbl:IsString key:_) -> unionWithFact tbl $ HasKey key
   ),
   ("del",IsFunction [
-      Expression "index" $ \(_:IsString key:_) -> return $ IsIndex $ fromFacts [HasKey key],
-      Expression "key" $ \_args -> return $ IsString Universe
-      ] $ Expression "return" $ \(tbl:IsString key:_) -> unionWithFact tbl $ HasNotKey key
+      By $ Expression "index" $ \(_:IsString key:_) -> return $ IsIndex $ fromFacts [HasKey key],
+      By $ Expression "key" $ \_args -> return $ IsString Universe
+      ] $ By $ Expression "return" $ \(tbl:IsString key:_) -> unionWithFact tbl $ HasNotKey key
   )
   ]
   where unionWithFact (IsIndex ks) = return . IsIndex . Union ks . By
