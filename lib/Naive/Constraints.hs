@@ -108,4 +108,7 @@ combineConstraints :: ConstraintErrorM m => IsConstraint -> IsConstraint -> m Is
 combineConstraints (IsIndex lhs) (IsIndex rhs) = IsIndex <$> unifyFacts lhs rhs
 combineConstraints (IsString Universe) rhs@(IsString _) = return rhs
 combineConstraints lhs@(IsString _) (IsString Universe) = return lhs
+combineConstraints lhs@(IsString (By lhsLiteral)) (IsString (By rhsLiteral))
+  | rhsLiteral == lhsLiteral = return lhs
+  | otherwise                = throwError $ Conflicts [(lhsLiteral,rhsLiteral)]
 combineConstraints lhs rhs = throwError $ UnexpectedType (getType lhs) (getType rhs)
