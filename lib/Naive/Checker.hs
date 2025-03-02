@@ -39,33 +39,33 @@ setConstraint name newConstraint = modify $ M.insert name newConstraint
 
 applyExpression :: CheckerM m => [IsConstraint] -> (IsConstraint,Constraint 'Function) -> m ()
 applyExpression argConstraints (arg,By (Naive.Constraints.Expression name expression)) = do
-  constraint <- withCheckerError $ expression argConstraints >>= combineConstraints arg
+  constraint <- withCheckerError $ expression argConstraints >>= unifyConstraints arg
   setConstraint name constraint
-applyExpression _ _ = error $ "unexpected function constraint"
+applyExpression _ _ = error "unexpected function constraint"
 
-collectConstraints :: CheckerErrorM m => [Stmt] -> m (M.Map String IsConstraint)
-collectConstraints statements = runCheckerM $ do
+collectFunctionConstraint :: CheckerM m => [Expr] -> IsConstraint -> m IsConstraint
+collectFunctionConstraint args (IsFunction argConstraints (By retConstraint))
+  | length argConstraints /= length args = throwError $ WrongArity (length argConstraints) (length args)
+  | otherwise = do
+      collectedArgConstraints <- mapM collectConstraint args
+      forM_ (zip collectedArgConstraints argConstraints) $
+        applyExpression collectedArgConstraints
+      withCheckerError $ expression retConstraint collectedArgConstraints
+collectFunctionConstraint _ x = throwError $ Constraint $ UnexpectedType Function $ getType x
+
+collectConstraint :: CheckerM m => Expr -> m IsConstraint
+collectConstraint (Variable name)           = getConstraint name
+collectConstraint (StringLiteral lit)       = return $ IsString $ By $ IsLiteral lit
+collectConstraint (Application fnName args) = getConstraint fnName >>= collectFunctionConstraint args
+collectConstraint (DictLiteral kvs)         = return $ fromKeys $ fst <$> kvs
+  where fromKeys [] = IsIndex $ By $ HasNotKey Universe
+        fromKeys ks = IsIndex $ fromFacts $ HasKey . By . IsLiteral <$> ks
+
+collectAllConstraints :: CheckerErrorM m => [Stmt] -> m (M.Map String IsConstraint)
+collectAllConstraints statements = runCheckerM $
   forM_ statements $ \case
-    Assignment name expr         -> collectConstraint' expr >>= setConstraint name
-    Naive.Parser.Expression expr -> void $ collectConstraint' expr
-  where
-    collectConstraint' :: CheckerM m => Expr -> m IsConstraint
-    collectConstraint' (Variable name)     = getConstraint name
-    collectConstraint' (StringLiteral lit) = return $ IsString $ By $ IsLiteral lit
-    collectConstraint' (DictLiteral kvs)  = return $ fromKeys $ fst <$> kvs
-    collectConstraint' (Application fnName args) = do
-      getConstraint fnName >>= \case
-        IsFunction argConstraints _ | length argConstraints /= length args ->
-          throwError $ WrongArity (length argConstraints) (length args)
-        IsFunction argConstraints (By retConstraint) -> do
-          collectedArgConstraints <- mapM collectConstraint' args
-          forM_ (zip collectedArgConstraints argConstraints) $
-            applyExpression collectedArgConstraints
-          withCheckerError $
-            expression retConstraint collectedArgConstraints
-        x -> throwError $ Constraint $ UnexpectedType Function $ getType x
-    fromKeys [] = IsIndex $ By $ HasNotKey Universe
-    fromKeys ks = IsIndex $ fromFacts $ map (HasKey . By . IsLiteral) ks
+    Assignment name expr         -> collectConstraint expr >>= setConstraint name
+    Naive.Parser.Expression expr -> void $ collectConstraint expr
 
 checkCode :: [Stmt] -> Maybe CheckerError
-checkCode = either return (const Nothing) . collectConstraints
+checkCode = either return (const Nothing) . collectAllConstraints

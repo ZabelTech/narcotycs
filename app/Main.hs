@@ -17,8 +17,8 @@ main :: IO ()
 main = do
   args <- getArgs
   forM_ args $ \file -> runMaybeT $ do
-    ast      <- MaybeT $ reportParsingError =<< Naive.Parser.parseFile file
-    problems <- return $ Naive.Checker.checkCode ast
+    ast <- MaybeT $ reportParsingError =<< Naive.Parser.parseFile file
+    let problems = Naive.Checker.checkCode ast
     lift $ do
       putStrLn "Constraint Problems: "
       mapM_ print problems
