@@ -1,0 +1,39 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [master,ci]
+
+jobs:
+
+  test:
+    name: ${{ matrix.os }} (${{ matrix.ghc }}/${{ matrix.cabal }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        ghc: ['9.10.1']
+        cabal: ['3.12.1.0']
+        os: [ubuntu-22.04]
+
+
+    steps:
+
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Setup Haskell
+        uses: haskell-actions/setup@v2
+        with:
+          ghc-version: ${{ matrix.ghc }}
+          cabal-version: ${{ matrix.cabal }}
+
+      - name: Versions
+        run: |
+          ghc --version
+          echo
+          cabal --version
+
+      - name: Test
+        run: |
+          cabal test
